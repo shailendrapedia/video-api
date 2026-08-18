@@ -21,6 +21,7 @@ def download():
     ydl_opts = {
         'format': 'best[ext=mp4]/best',
         'quiet': True,
+        'extractor_args': {'youtubetab': {'skip': 'authcheck'}}, # Yeh line error fix karegi
     }
     
     # Agar cookies.txt file bani hai toh use enable karein
