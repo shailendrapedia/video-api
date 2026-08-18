@@ -4,7 +4,7 @@ import os
 
 app = Flask(__name__)
 
-# --- HARDCODED COOKIES DATA (Aapki di hui exact copy) ---
+# --- HARDCODED COOKIES DATA ---
 RAW_COOKIE_DATA = '''# Netscape HTTP Cookie File
 # https://curl.haxx.se/rfc/cookie_spec.html
 # This is a generated file! Do not edit.
@@ -33,7 +33,6 @@ RAW_COOKIE_DATA = '''# Netscape HTTP Cookie File
 .youtube.com	TRUE	/	TRUE	1802566218	__Secure-ROLLOUT_TOKEN	CLq0w-2YmKq27gEQx-Wksa70iQMY_-O53fqolgM%3D
 .youtube.com	TRUE	/	TRUE	1802566218	__Secure-YNID	21.YT=nM3lLNV3ClZB0QNFPdPd48NUNqSOemo4tvsDDgBvJ2ZrIK-w47ED3FNMhoAySzWj1qE92qzIkC4oQL4ukUzmw2GY0nIWFTCTE5oB8LBHpKGftdDXxXUtWDIb9CRLKFOkv9FktlbMmsxGi5bxtiNCweW51DSROA5fXnvxwMJrwR4VGO7vplMPzP9O7NGmM_oUZxGbvnqTJDTsgRtXOUQOUFrlhF8CqgXd7IrO7lx0Qk1ijkoeLFDZI4kvihidfcuCvqhJ_AcQY-VhZSh3XIDynSqVCq5dZMHLop8HpXwA4iz1gNMt4nqXqLnxdlmhGG_idWb0FFqhWTQCJuiFxbjbkQ'''
 
-# --- Render app start hote hi is file ko create kar dega ---
 with open("cookies.txt", "w", encoding="utf-8") as f:
     f.write(RAW_COOKIE_DATA.strip())
 
@@ -48,9 +47,8 @@ def download():
     ydl_opts = {
         'format': 'all',  
         'quiet': True,
-        # Android client try karte hain dobara, lekin abhi real cookies saath mein hain, toh fail nahi hona chahiye.
-        # TV aur Web wale combination me YouTube zyada pareshan kar raha hai
-        'extractor_args': {'youtube': {'player_client': ['android', 'ios', 'tv', 'web']}},
+        # YAHAN SIRF 'web' RAKHA HAI KUKYI COOKIES BHI WEB KI HAIN
+        'extractor_args': {'youtube': {'player_client': ['web']}},
         'noplaylist': True,
         'ignoreerrors': False, 
         'cookiefile': 'cookies.txt', 
@@ -66,7 +64,6 @@ def download():
             video_link = None
             formats = info.get('formats', [])
             
-            # Master fix (18 and 22 fallbacks)
             for f_id in ['22', '18']:
                 for f in formats:
                     if str(f.get('format_id')) == f_id and f.get('url'):
