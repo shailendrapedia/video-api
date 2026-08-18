@@ -19,7 +19,7 @@ def download():
         return jsonify({'error': 'URL nahi mila'}), 400
         
     ydl_opts = {
-        'format': 'all',  # Saare formats fetch karega
+        'format': 'all',  
         'quiet': True,
         'extractor_args': {'youtubetab': {'skip': 'authcheck'}},
         'noplaylist': True,
@@ -34,47 +34,59 @@ def download():
             info = ydl.extract_info(video_url, download=False)
             
             if not info:
-                return jsonify({'error': 'Video extract nahi ho paya. URL ya Cookies check karein.'}), 500
+                return jsonify({'error': 'Video fetch nahi ho paya.'}), 500
             
             video_link = None
             formats = info.get('formats', [])
             
-            # --- STRICT FILTERING FOR REAL VIDEOS ONLY ---
-            valid_formats = []
-            for f in formats:
-                url = f.get('url', '')
-                ext = f.get('ext', '')
-                
-                # Storyboards, Images, aur HLS(m3u8) links ko reject karo
-                if 'sb/' in url or ext in ['jpg', 'jpeg', 'png', 'webp', 'mhtml']:
-                    continue
-                if 'm3u8' in url or f.get('protocol') in ['m3u8', 'm3u8_native']:
-                    continue
-                    
-                valid_formats.append(f)
-
-            # Pehle dekhein jisme Video + Audio dono ho
-            combined = [f for f in valid_formats if f.get('vcodec') != 'none' and f.get('acodec') != 'none']
+            # --- THE MASTER FIX: Target specific pre-merged formats ---
+            # 22 = 720p MP4, 18 = 360p MP4 (Inme audio/video hamesha combined hota hai)
+            for f_id in ['22', '18']:
+                for f in formats:
+                    if str(f.get('format_id')) == f_id and f.get('url'):
+                        video_link = f.get('url')
+                        break
+                if video_link:
+                    break
             
-            if combined:
-                # MP4 ko priority
-                mp4s = [f for f in combined if f.get('ext') == 'mp4']
-                if mp4s:
-                    mp4s.sort(key=lambda x: x.get('height') or 0, reverse=True)
-                    video_link = mp4s[0].get('url')
-                else:
+            # Agar kisi wajah se 22 ya 18 na mile, tab filter use karein
+            if not video_link:
+                combined = []
+                for f in formats:
+                    url = f.get('url', '')
+                    protocol = f.get('protocol', '')
+                    
+                    if not url: continue
+                    if 'm3u8' in protocol or 'm3u8' in url or 'manifest' in url: continue
+                    if 'sb/' in url or '/storyboard' in url: continue
+                    
+                    # Agar audio aur video dono hain
+                    if f.get('vcodec') != 'none' and f.get('acodec') != 'none':
+                        combined.append(f)
+                
+                if combined:
                     combined.sort(key=lambda x: x.get('height') or 0, reverse=True)
                     video_link = combined[0].get('url')
-            
-            # Agar Combined na mile, toh sirf Video (no audio) ka best quality le lo (Shorts me aksar aisa hota hai)
+
+            # Agar audio nahi mil raha (Shorts me kabhi-kabhi), toh sirf video utha lo
             if not video_link:
-                video_only = [f for f in valid_formats if f.get('vcodec') != 'none']
+                video_only = []
+                for f in formats:
+                    url = f.get('url', '')
+                    protocol = f.get('protocol', '')
+                    if not url: continue
+                    if 'm3u8' in protocol or 'm3u8' in url or 'manifest' in url: continue
+                    if 'sb/' in url or '/storyboard' in url: continue
+                    
+                    if f.get('vcodec') != 'none':
+                        video_only.append(f)
+                        
                 if video_only:
                     video_only.sort(key=lambda x: x.get('height') or 0, reverse=True)
                     video_link = video_only[0].get('url')
 
             if not video_link:
-                return jsonify({'error': 'Is video ka sahi MP4/Direct link nahi mil paya.'}), 500
+                return jsonify({'error': 'Is video ka direct MP4 stream maujood nahi hai.'}), 500
 
             return jsonify({
                 'url': video_link,
