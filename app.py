@@ -21,9 +21,10 @@ def download():
     ydl_opts = {
         'format': 'all',  
         'quiet': True,
-        'extractor_args': {'youtubetab': {'skip': 'authcheck'}},
+        # YEH LINE JAADU HAI: YouTube ko lagega request Mobile App se aa rahi hai
+        'extractor_args': {'youtube': {'player_client': ['android', 'ios']}},
         'noplaylist': True,
-        'ignoreerrors': True,
+        'ignoreerrors': False, # Agar ab fail hoga toh asli error message dikhayega
     }
     
     if os.path.exists("cookies.txt"):
@@ -40,7 +41,6 @@ def download():
             formats = info.get('formats', [])
             
             # --- THE MASTER FIX: Target specific pre-merged formats ---
-            # 22 = 720p MP4, 18 = 360p MP4 (Inme audio/video hamesha combined hota hai)
             for f_id in ['22', '18']:
                 for f in formats:
                     if str(f.get('format_id')) == f_id and f.get('url'):
@@ -49,7 +49,7 @@ def download():
                 if video_link:
                     break
             
-            # Agar kisi wajah se 22 ya 18 na mile, tab filter use karein
+            # Agar 22 ya 18 na mile, tab fallback
             if not video_link:
                 combined = []
                 for f in formats:
@@ -68,7 +68,6 @@ def download():
                     combined.sort(key=lambda x: x.get('height') or 0, reverse=True)
                     video_link = combined[0].get('url')
 
-            # Agar audio nahi mil raha (Shorts me kabhi-kabhi), toh sirf video utha lo
             if not video_link:
                 video_only = []
                 for f in formats:
@@ -95,6 +94,7 @@ def download():
             })
             
     except Exception as e:
+        # Ab asli error return hoga Hostinger ko
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
