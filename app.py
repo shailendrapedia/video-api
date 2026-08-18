@@ -21,10 +21,10 @@ def download():
     ydl_opts = {
         'format': 'all',  
         'quiet': True,
-        # YEH LINE JAADU HAI: YouTube ko lagega request Mobile App se aa rahi hai
-        'extractor_args': {'youtube': {'player_client': ['android', 'ios']}},
+        # YAHAN TV CLIENT LAGA DIYA HAI - Smart TVs ko YouTube block nahi karta
+        'extractor_args': {'youtube': {'player_client': ['tv', 'web']}},
         'noplaylist': True,
-        'ignoreerrors': False, # Agar ab fail hoga toh asli error message dikhayega
+        'ignoreerrors': False, 
     }
     
     if os.path.exists("cookies.txt"):
@@ -94,7 +94,6 @@ def download():
             })
             
     except Exception as e:
-        # Ab asli error return hoga Hostinger ko
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
