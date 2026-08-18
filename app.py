@@ -18,10 +18,11 @@ def download():
     if not video_url:
         return jsonify({'error': 'URL nahi mila'}), 400
         
+    # 'best' format best hota hai direct download ke liye, bina format restriction ke
     ydl_opts = {
-        'format': 'best[ext=mp4]/best',
+        'format': 'best', 
         'quiet': True,
-        'extractor_args': {'youtubetab': {'skip': 'authcheck'}}, # Yeh line error fix karegi
+        'extractor_args': {'youtubetab': {'skip': 'authcheck'}},
     }
     
     # Agar cookies.txt file bani hai toh use enable karein
@@ -31,8 +32,15 @@ def download():
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(video_url, download=False)
+            
+            # Agar 'url' field empty hai, toh 'requested_formats' se URL lene ki koshish karein
+            video_link = info.get('url')
+            if not video_link and 'formats' in info:
+                # Sabse pehla available direct link utha lein
+                video_link = info['formats'][0]['url']
+                
             return jsonify({
-                'url': info.get('url'),
+                'url': video_link,
                 'title': info.get('title', 'Unknown Title'),
                 'channel': info.get('uploader') or info.get('channel', 'Unknown Channel')
             })
