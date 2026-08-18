@@ -18,14 +18,14 @@ def download():
     if not video_url:
         return jsonify({'error': 'URL nahi mila'}), 400
         
-    # YAHAN SE 'format' HATA DIYA HAI - Taaki yt-dlp crash na ho
     ydl_opts = {
+        'format': 'all',  # <-- CRASH-PROOF JAADU: yt-dlp format filter nahi karega, sirf list dega
         'quiet': True,
         'extractor_args': {'youtubetab': {'skip': 'authcheck'}},
-        'noplaylist': True, # Agar playlist link ho toh sirf single video uthaye
+        'noplaylist': True,
+        'ignoreerrors': True, # Kisi bhi internal error par crash hone se rokega
     }
     
-    # Agar cookies.txt file bani hai toh use enable karein
     if os.path.exists("cookies.txt"):
         ydl_opts['cookiefile'] = 'cookies.txt'
     
@@ -33,39 +33,41 @@ def download():
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(video_url, download=False)
             
-            # --- BULLETPROOF FORMAT SELECTION IN PYTHON ---
+            if not info:
+                return jsonify({'error': 'Video extract nahi ho paya. URL ya Cookies check karein.'}), 500
+            
             video_link = None
             formats = info.get('formats', [])
             
-            # Filter: Aise formats jisme Video aur Audio dono maujood hon
-            combined_formats = [
+            # 1. Aisa format dhoondo jisme Video + Audio dono hon
+            combined = [
                 f for f in formats 
                 if f.get('vcodec') != 'none' and f.get('acodec') != 'none'
             ]
             
-            if combined_formats:
-                # MP4 ko priority dein, aur resolution (height) ke hisaab se sort karein
-                mp4_formats = [f for f in combined_formats if f.get('ext') == 'mp4']
-                if mp4_formats:
-                    mp4_formats.sort(key=lambda x: x.get('height', 0) or 0, reverse=True)
-                    video_link = mp4_formats[0].get('url')
+            if combined:
+                # MP4 ko priority
+                mp4s = [f for f in combined if f.get('ext') == 'mp4']
+                if mp4s:
+                    mp4s.sort(key=lambda x: x.get('height') or 0, reverse=True)
+                    video_link = mp4s[0].get('url')
                 else:
-                    combined_formats.sort(key=lambda x: x.get('height', 0) or 0, reverse=True)
-                    video_link = combined_formats[0].get('url')
+                    combined.sort(key=lambda x: x.get('height') or 0, reverse=True)
+                    video_link = combined[0].get('url')
             
-            # Fallback 1: yt-dlp ka default URL
-            if not video_link and info.get('url'):
-                video_link = info.get('url')
-                
-            # Fallback 2: Agar kuch nahi mila toh list ka aakhri valid url utha lo
-            if not video_link and formats:
+            # 2. Agar combined nahi mila, toh fallback to best available URL
+            if not video_link:
                 for f in reversed(formats):
                     if f.get('url'):
                         video_link = f.get('url')
                         break
                         
+            # 3. Agar info dict me direct url ho
+            if not video_link and info.get('url'):
+                video_link = info.get('url')
+                
             if not video_link:
-                return jsonify({'error': 'Koi valid video link extract nahi ho paya.'}), 500
+                return jsonify({'error': 'Is video ka direct download link nahi mil paya.'}), 500
 
             return jsonify({
                 'url': video_link,
