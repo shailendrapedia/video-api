@@ -19,11 +19,11 @@ def download():
         return jsonify({'error': 'URL nahi mila'}), 400
         
     ydl_opts = {
-        'format': 'all',  # <-- CRASH-PROOF JAADU: yt-dlp format filter nahi karega, sirf list dega
+        'format': 'all',  # Saare formats fetch karega
         'quiet': True,
         'extractor_args': {'youtubetab': {'skip': 'authcheck'}},
         'noplaylist': True,
-        'ignoreerrors': True, # Kisi bhi internal error par crash hone se rokega
+        'ignoreerrors': True,
     }
     
     if os.path.exists("cookies.txt"):
@@ -39,11 +39,22 @@ def download():
             video_link = None
             formats = info.get('formats', [])
             
-            # 1. Aisa format dhoondo jisme Video + Audio dono hon
-            combined = [
-                f for f in formats 
-                if f.get('vcodec') != 'none' and f.get('acodec') != 'none'
-            ]
+            # --- STRICT FILTERING FOR REAL VIDEOS ONLY ---
+            valid_formats = []
+            for f in formats:
+                url = f.get('url', '')
+                ext = f.get('ext', '')
+                
+                # Storyboards, Images, aur HLS(m3u8) links ko reject karo
+                if 'sb/' in url or ext in ['jpg', 'jpeg', 'png', 'webp', 'mhtml']:
+                    continue
+                if 'm3u8' in url or f.get('protocol') in ['m3u8', 'm3u8_native']:
+                    continue
+                    
+                valid_formats.append(f)
+
+            # Pehle dekhein jisme Video + Audio dono ho
+            combined = [f for f in valid_formats if f.get('vcodec') != 'none' and f.get('acodec') != 'none']
             
             if combined:
                 # MP4 ko priority
@@ -55,19 +66,15 @@ def download():
                     combined.sort(key=lambda x: x.get('height') or 0, reverse=True)
                     video_link = combined[0].get('url')
             
-            # 2. Agar combined nahi mila, toh fallback to best available URL
+            # Agar Combined na mile, toh sirf Video (no audio) ka best quality le lo (Shorts me aksar aisa hota hai)
             if not video_link:
-                for f in reversed(formats):
-                    if f.get('url'):
-                        video_link = f.get('url')
-                        break
-                        
-            # 3. Agar info dict me direct url ho
-            if not video_link and info.get('url'):
-                video_link = info.get('url')
-                
+                video_only = [f for f in valid_formats if f.get('vcodec') != 'none']
+                if video_only:
+                    video_only.sort(key=lambda x: x.get('height') or 0, reverse=True)
+                    video_link = video_only[0].get('url')
+
             if not video_link:
-                return jsonify({'error': 'Is video ka direct download link nahi mil paya.'}), 500
+                return jsonify({'error': 'Is video ka sahi MP4/Direct link nahi mil paya.'}), 500
 
             return jsonify({
                 'url': video_link,
