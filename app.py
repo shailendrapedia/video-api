@@ -4,16 +4,11 @@ import os
 
 app = Flask(__name__)
 
-# --- YAHAN APNI COOKIES.TXT KA SAARA TEXT PASTE KAREIN ---
-RAW_COOKIE_DATA = '''# Netscape HTTP Cookie File
-# https://curl.haxx.se/rfc/cookie_spec.html
-# This is a generated file! Do not edit.
-
-# (APNI COOKIES YAHAN PASTE KAREIN...)
-'''
-
-with open("cookies.txt", "w", encoding="utf-8") as f:
-    f.write(RAW_COOKIE_DATA.strip())
+# Render ke environment variable se cookies file automatically generate karna
+cookie_data = os.environ.get("YOUTUBE_COOKIES")
+if cookie_data:
+    with open("cookies.txt", "w") as f:
+        f.write(cookie_data)
 
 @app.route('/download', methods=['POST'])
 def download():
@@ -26,11 +21,13 @@ def download():
     ydl_opts = {
         'format': 'all',  
         'quiet': True,
-        'extractor_args': {'youtube': {'player_client': ['web']}},
+        'extractor_args': {'youtubetab': {'skip': 'authcheck'}},
         'noplaylist': True,
-        'ignoreerrors': False, 
-        'cookiefile': 'cookies.txt', 
+        'ignoreerrors': True,
     }
+    
+    if os.path.exists("cookies.txt"):
+        ydl_opts['cookiefile'] = 'cookies.txt'
     
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -39,51 +36,62 @@ def download():
             if not info:
                 return jsonify({'error': 'Video fetch nahi ho paya.'}), 500
             
+            video_link = None
             formats = info.get('formats', [])
-            available_formats = []
             
-            for f in formats:
-                url = f.get('url', '')
-                protocol = f.get('protocol', '')
-                ext = f.get('ext', '')
-                
-                # Faltu links aur m3u8 ko ignore karein
-                if not url: continue
-                if 'm3u8' in protocol or 'm3u8' in url or 'manifest' in url: continue
-                if 'sb/' in url or '/storyboard' in url: continue
-                if f.get('vcodec') == 'none': continue # Sirf video formats chahiye
-                
-                height = f.get('height', 0) or 0
-                has_audio = f.get('acodec') != 'none'
-                
-                # Format ka mast naam banayein (Audio hai ya nahi)
-                audio_text = "🔊 (Video + Audio)" if has_audio else "🔇 (Sirf Video / Mute)"
-                label = f"{height}p - {ext.upper()} {audio_text}"
-                
-                available_formats.append({
-                    'label': label,
-                    'url': url,
-                    'height': height
-                })
-                
-            # Highest Quality upar rakhne ke liye sort karein
-            available_formats.sort(key=lambda x: x['height'], reverse=True)
+            # --- THE MASTER FIX: Target specific pre-merged formats ---
+            # 22 = 720p MP4, 18 = 360p MP4 (Inme audio/video hamesha combined hota hai)
+            for f_id in ['22', '18']:
+                for f in formats:
+                    if str(f.get('format_id')) == f_id and f.get('url'):
+                        video_link = f.get('url')
+                        break
+                if video_link:
+                    break
             
-            # Duplicate quality hatayein
-            seen = set()
-            unique_formats = []
-            for f in available_formats:
-                if f['label'] not in seen:
-                    seen.add(f['label'])
-                    unique_formats.append(f)
+            # Agar kisi wajah se 22 ya 18 na mile, tab filter use karein
+            if not video_link:
+                combined = []
+                for f in formats:
+                    url = f.get('url', '')
+                    protocol = f.get('protocol', '')
+                    
+                    if not url: continue
+                    if 'm3u8' in protocol or 'm3u8' in url or 'manifest' in url: continue
+                    if 'sb/' in url or '/storyboard' in url: continue
+                    
+                    # Agar audio aur video dono hain
+                    if f.get('vcodec') != 'none' and f.get('acodec') != 'none':
+                        combined.append(f)
+                
+                if combined:
+                    combined.sort(key=lambda x: x.get('height') or 0, reverse=True)
+                    video_link = combined[0].get('url')
 
-            if not unique_formats:
-                return jsonify({'error': 'Koi direct stream nahi mili.'}), 500
+            # Agar audio nahi mil raha (Shorts me kabhi-kabhi), toh sirf video utha lo
+            if not video_link:
+                video_only = []
+                for f in formats:
+                    url = f.get('url', '')
+                    protocol = f.get('protocol', '')
+                    if not url: continue
+                    if 'm3u8' in protocol or 'm3u8' in url or 'manifest' in url: continue
+                    if 'sb/' in url or '/storyboard' in url: continue
+                    
+                    if f.get('vcodec') != 'none':
+                        video_only.append(f)
+                        
+                if video_only:
+                    video_only.sort(key=lambda x: x.get('height') or 0, reverse=True)
+                    video_link = video_only[0].get('url')
+
+            if not video_link:
+                return jsonify({'error': 'Is video ka direct MP4 stream maujood nahi hai.'}), 500
 
             return jsonify({
+                'url': video_link,
                 'title': info.get('title', 'Unknown Title'),
-                'channel': info.get('uploader') or info.get('channel', 'Unknown Channel'),
-                'formats': unique_formats
+                'channel': info.get('uploader') or info.get('channel', 'Unknown Channel')
             })
             
     except Exception as e:
